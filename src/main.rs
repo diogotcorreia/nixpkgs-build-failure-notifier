@@ -58,7 +58,8 @@ async fn main() -> Result<()> {
     let cli = Cli::parse();
 
     let maintainers = cli.maintainers.clone();
-    let extra_packages = spawn_blocking(move || fetch_packages_of_maintainers(&maintainers)).await??;
+    let extra_packages =
+        spawn_blocking(move || fetch_packages_of_maintainers(&maintainers)).await??;
     if !cli.maintainers.is_empty() {
         println!(
             "Resolved {} package(s) from maintainers:",
@@ -75,7 +76,7 @@ async fn main() -> Result<()> {
     let builds = {
         let mut builds = vec![];
         for (jobset, job) in generate_job_combinations(&cli, &extra_packages) {
-            match hydra_api.get_latest_build(jobset, &job).await {
+            match hydra_api.get_latest_build(&jobset, &job).await {
                 Ok(build) => {
                     builds.push(build);
                 }
@@ -132,15 +133,17 @@ async fn main() -> Result<()> {
 fn generate_job_combinations<'a>(
     cli: &'a Cli,
     extra_packages: &'a [String],
-) -> impl Iterator<Item = (&'a str, String)> {
+) -> impl Iterator<Item = (String, String)> {
     cli.jobsets
         .iter()
         .flat_map(move |jobset| {
-            cli.jobs.iter().chain(extra_packages).flat_map(|job| {
-                cli.systems.iter().map(|system| {
+            let (project, jobset) = jobset.split_once(':').unwrap_or((jobset, ""));
+            let (jobset, prefix) = jobset.split_once(':').unwrap_or((jobset, ""));
+            cli.jobs.iter().chain(extra_packages).flat_map(move |job| {
+                cli.systems.iter().map(move |system| {
                     (
-                        jobset.as_str(),
-                        format!("{}.{}", job.as_str(), system.as_str()),
+                        format!("{project}/{jobset}"),
+                        format!("{}{}.{}", prefix, job.as_str(), system.as_str()),
                     )
                 })
             })
