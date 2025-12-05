@@ -5,11 +5,14 @@ edition = "2024"
 
 [dependencies]
 anyhow = "1.0.100"
+brotli = "8.0.2"
 clap = { version = "4.5.53", features = ["derive", "env"] }
+itertools = "0.14.0"
 keyv = { version = "0.3.0", features = ["postgres"] }
 lettre = "0.11.19"
-reqwest = { version = "0.12.24", features = ["json"] }
+reqwest = { version = "0.12.24", features = ["blocking", "json"] }
 scraper = "0.24.0"
 serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0.145"
+struson = { version = "0.6.0", features = ["simple-api"] }
 tokio = "1.48.0"

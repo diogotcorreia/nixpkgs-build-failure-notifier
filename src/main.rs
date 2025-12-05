@@ -2,7 +2,11 @@ use std::process::exit;
 
 use anyhow::Result;
 use clap::Parser;
-use nixpkgs_build_failure_notifier::{email::Mailer, hydra::HydraApi, state::BuildStore};
+use itertools::Itertools;
+use nixpkgs_build_failure_notifier::{
+    email::Mailer, hydra::HydraApi, maintainers::fetch_packages_of_maintainers, state::BuildStore,
+};
+use tokio::task::spawn_blocking;
 
 #[derive(Parser)]
 #[command(version, about, long_about = None)]
@@ -23,6 +27,10 @@ struct Cli {
         "aarch64-darwin".to_string()
     ])]
     systems: Vec<String>,
+
+    /// Maintainers whose packages should also be checked
+    #[arg(long = "maintainer")]
+    maintainers: Vec<String>,
 
     /// Connection string to the PostgreSQL database.
     #[arg(env)]
@@ -49,12 +57,24 @@ struct Cli {
 async fn main() -> Result<()> {
     let cli = Cli::parse();
 
+    let maintainers = cli.maintainers.clone();
+    let extra_packages = spawn_blocking(move || fetch_packages_of_maintainers(&maintainers)).await??;
+    if !cli.maintainers.is_empty() {
+        println!(
+            "Resolved {} package(s) from maintainers:",
+            extra_packages.len()
+        );
+        for pkg in &extra_packages {
+            println!("- {pkg}");
+        }
+    }
+
     let hydra_api = HydraApi::new();
     let state = BuildStore::new(&cli.db_url).await?;
 
     let builds = {
         let mut builds = vec![];
-        for (jobset, job) in generate_job_combinations(&cli) {
+        for (jobset, job) in generate_job_combinations(&cli, &extra_packages) {
             match hydra_api.get_latest_build(jobset, &job).await {
                 Ok(build) => {
                     builds.push(build);
@@ -109,15 +129,22 @@ async fn main() -> Result<()> {
     Ok(())
 }
 
-fn generate_job_combinations(cli: &Cli) -> impl Iterator<Item = (&str, String)> {
-    cli.jobsets.iter().flat_map(|jobset| {
-        cli.jobs.iter().flat_map(|job| {
-            cli.systems.iter().map(|system| {
-                (
-                    jobset.as_str(),
-                    format!("{}.{}", job.as_str(), system.as_str()),
-                )
+fn generate_job_combinations<'a>(
+    cli: &'a Cli,
+    extra_packages: &'a [String],
+) -> impl Iterator<Item = (&'a str, String)> {
+    cli.jobsets
+        .iter()
+        .flat_map(move |jobset| {
+            cli.jobs.iter().chain(extra_packages).flat_map(|job| {
+                cli.systems.iter().map(|system| {
+                    (
+                        jobset.as_str(),
+                        format!("{}.{}", job.as_str(), system.as_str()),
+                    )
+                })
             })
         })
-    })
+        .sorted()
+        .dedup()
 }
