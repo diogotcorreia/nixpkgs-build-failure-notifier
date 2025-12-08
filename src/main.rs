@@ -33,23 +33,23 @@ struct Cli {
     maintainers: Vec<String>,
 
     /// Connection string to the PostgreSQL database.
-    #[arg(env)]
+    #[arg(long, env)]
     db_url: String,
 
     /// Hostname of the SMTP server.
-    #[arg(env)]
+    #[arg(long, env)]
     smtp_host: String,
     /// Username to use when connecting to the SMTP server.
-    #[arg(env)]
+    #[arg(long, env)]
     smtp_username: String,
     /// Password to use when connecting to the SMTP server.
-    #[arg(env)]
+    #[arg(long, env)]
     smtp_password: String,
     /// Email address to send emails from.
-    #[arg(env)]
+    #[arg(long, env)]
     smtp_from: String,
     /// Destination address of the email notifications.
-    #[arg(env)]
+    #[arg(long, env)]
     smtp_to: String,
 }
 
