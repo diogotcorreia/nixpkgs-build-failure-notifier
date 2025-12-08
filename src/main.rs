@@ -91,17 +91,23 @@ async fn main() -> Result<()> {
         exit(1);
     }
 
-    let failing_changed: Vec<_> = {
-        let mut failing_changed = vec![];
+    let changed: Vec<_> = {
+        let mut changed = vec![];
         for build in &builds {
             let old = state
                 .update_build_status(&build.get_full_name(), build.buildstatus)
                 .await?;
-            if build.is_failing() && (old.is_none() || old != Some(build.buildstatus)) {
-                failing_changed.push(build);
+            // if build has a previous result, report if it has changed
+            // otherwise, only report if it is currently failing
+            let has_changed = match old {
+                Some(old_buildstatus) => old_buildstatus != build.buildstatus,
+                None => build.is_failing(),
+            };
+            if has_changed {
+                changed.push(build);
             }
         }
-        failing_changed
+        changed
     };
     let email = Mailer::new(
         &cli.smtp_host,
@@ -110,7 +116,7 @@ async fn main() -> Result<()> {
         cli.smtp_username,
         cli.smtp_password,
     )?;
-    email.send_report(&failing_changed)?;
+    email.send_report(&changed)?;
 
     let failing: Vec<_> = builds.iter().filter(|build| build.is_failing()).collect();
     if failing.is_empty() {
