@@ -6,9 +6,9 @@
     "group:all",
     "schedule:monthly"
   ],
+  "prConcurrentLimit": 1,
   "lockFileMaintenance": {
     "enabled": true,
-    "groupName": "all dependencies",
     "extends": [
       "schedule:monthly"
     ]
