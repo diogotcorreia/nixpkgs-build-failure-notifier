@@ -1,0 +1,19 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": [
+    "config:recommended",
+    "helpers:pinGitHubActionDigests",
+    "group:all",
+    "schedule:monthly"
+  ],
+  "prConcurrentLimit": 1,
+  "lockFileMaintenance": {
+    "enabled": true,
+    "extends": [
+      "schedule:monthly"
+    ]
+  },
+  "ignorePresets": [
+    ":semanticPrefixFixDepsChoreOthers"
+  ]
+}
