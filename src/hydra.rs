@@ -1,5 +1,5 @@
 use anyhow::{Result, anyhow, bail};
-use reqwest::{Client, ClientBuilder, header};
+use reqwest::{Client, ClientBuilder, header, retry};
 use scraper::{Html, Selector};
 use serde::Deserialize;
 
@@ -16,6 +16,13 @@ impl HydraApi {
         Self {
             client: ClientBuilder::new()
                 .user_agent("github:diogotcorreia/nixpkgs-build-failure-notifier")
+                .retry(retry::for_host("hydra.nixos.org").classify_fn(|req_rep| {
+                    if req_rep.status().is_none() {
+                        req_rep.retryable()
+                    } else {
+                        req_rep.success()
+                    }
+                }))
                 .build()
                 .expect("reqwest client to be created successfully"),
             base_url: "https://hydra.nixos.org",
