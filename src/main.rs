@@ -1,10 +1,13 @@
 use std::process::exit;
 
-use anyhow::Result;
+use anyhow::{Context, Result};
 use clap::Parser;
 use itertools::Itertools;
 use nixpkgs_build_failure_notifier::{
-    email::Mailer, hydra::HydraApi, maintainers::fetch_packages_of_maintainers, state::BuildStore,
+    email::{BuildOutcome, Mailer, ReportEntry},
+    hydra::HydraApi,
+    maintainers::fetch_packages_of_maintainers,
+    state::BuildStore,
 };
 use tokio::task::spawn_blocking;
 
@@ -91,23 +94,40 @@ async fn main() -> Result<()> {
         exit(1);
     }
 
-    let changed: Vec<_> = {
-        let mut changed = vec![];
+    let relevant_builds: Vec<_> = {
+        let mut relevant = vec![];
         for build in &builds {
             let old = state
-                .update_build_status(&build.get_full_name(), build.buildstatus)
+                .update_build_status(&build.get_full_name(), build.id, build.buildstatus)
                 .await?;
             // if build has a previous result, report if it has changed
             // otherwise, only report if it is currently failing
-            let has_changed = match old {
-                Some(old_buildstatus) => old_buildstatus != build.buildstatus,
-                None => build.is_failing(),
+            let outcome = match old {
+                Some(previous_build) if previous_build.id == build.id => {
+                    if build.is_failing() {
+                        Some(BuildOutcome::StillFailingSameBuild)
+                    } else {
+                        None
+                    }
+                }
+                Some(previous_build) if build.is_failing() => {
+                    if previous_build.is_failing() {
+                        Some(BuildOutcome::StillFailing)
+                    } else {
+                        Some(BuildOutcome::NewlyFailing)
+                    }
+                }
+                Some(previous_build) if previous_build.is_failing() => {
+                    Some(BuildOutcome::NewlySucceeding)
+                }
+                None if build.is_failing() => Some(BuildOutcome::NewlyFailing),
+                _ => None,
             };
-            if has_changed {
-                changed.push(build);
+            if let Some(outcome) = outcome {
+                relevant.push(ReportEntry::new(build, outcome));
             }
         }
-        changed
+        relevant
     };
     let email = Mailer::new(
         &cli.smtp_host,
@@ -116,7 +136,9 @@ async fn main() -> Result<()> {
         cli.smtp_username,
         cli.smtp_password,
     )?;
-    email.send_report(&changed)?;
+    email
+        .send_report(&relevant_builds)
+        .context("Failed to send email")?;
 
     let failing: Vec<_> = builds.iter().filter(|build| build.is_failing()).collect();
     if failing.is_empty() {
