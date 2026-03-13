@@ -1,4 +1,4 @@
-use anyhow::Result;
+use anyhow::{Context, Result};
 use lettre::{
     Message, SmtpTransport, Transport,
     message::{Mailbox, header::ContentType},
@@ -32,8 +32,8 @@ impl Mailer {
         })
     }
 
-    pub fn send_report(&self, builds: &[&HydraBuild]) -> Result<()> {
-        if builds.is_empty() {
+    pub fn send_report(&self, entries: &[ReportEntry]) -> Result<()> {
+        if entries.is_empty() {
             return Ok(());
         }
 
@@ -42,27 +42,94 @@ impl Mailer {
             .to(self.to.clone())
             .subject("Packages failing to build in Nixpkgs")
             .header(ContentType::TEXT_PLAIN)
-            .body(Self::build_email_content(builds))?;
+            .body(Self::build_email_content(entries).context("failed to build email contents")?)?;
 
         self.transport.send(&email)?;
 
         Ok(())
     }
 
-    fn build_email_content(builds: &[&HydraBuild]) -> String {
+    fn build_email_content(entries: &[ReportEntry]) -> Result<String> {
         let mut res = String::new();
+
+        Self::build_email_section(
+            &mut res,
+            entries,
+            "Newly failing",
+            BuildOutcome::NewlyFailing,
+        )?;
+        Self::build_email_section(
+            &mut res,
+            entries,
+            "Still failing",
+            BuildOutcome::StillFailing,
+        )?;
+        Self::build_email_section(
+            &mut res,
+            entries,
+            "Newly succeeding",
+            BuildOutcome::NewlySucceeding,
+        )?;
+        Self::build_email_section(
+            &mut res,
+            entries,
+            "Other packages currently failing",
+            BuildOutcome::StillFailingSameBuild,
+        )?;
+
+        Ok(res)
+    }
+
+    fn build_email_section(
+        buffer: &mut String,
+        entries: &[ReportEntry],
+        heading: &'static str,
+        filter_outcome: BuildOutcome,
+    ) -> Result<()> {
+        let mut builds = entries
+            .iter()
+            .filter(|entry| entry.outcome == filter_outcome)
+            .map(|entry| entry.build)
+            .peekable();
+
+        if builds.peek().is_none() {
+            return Ok(());
+        }
+
+        writeln!(buffer, "# {}", heading)?;
+        writeln!(buffer)?;
 
         for build in builds {
             writeln!(
-                &mut res,
+                buffer,
                 "- {} - https://hydra.nixos.org/build/{} - {}",
                 build.get_full_name(),
                 build.id,
                 build.build_status_to_str()
-            )
-            .unwrap();
+            )?;
         }
 
-        res
+        writeln!(buffer)?;
+
+        Ok(())
+    }
+}
+
+#[derive(PartialEq, Eq)]
+pub enum BuildOutcome {
+    NewlyFailing,
+    StillFailing,
+    StillFailingSameBuild,
+    NewlySucceeding,
+}
+
+pub struct ReportEntry<'a> {
+    build: &'a HydraBuild,
+    outcome: BuildOutcome,
+}
+
+impl<'a> ReportEntry<'a> {
+    pub fn new(build: &'a HydraBuild, outcome: BuildOutcome) -> Self {
+        Self { build, outcome }
     }
 }

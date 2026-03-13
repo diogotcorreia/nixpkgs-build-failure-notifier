@@ -1,5 +1,6 @@
 use anyhow::{Context, Result};
 use keyv::{Keyv, adapter::postgres::PostgresStoreBuilder};
+use serde::{Deserialize, Serialize};
 
 pub struct BuildStore {
     conn: Keyv,
@@ -26,16 +27,37 @@ impl BuildStore {
     pub async fn update_build_status(
         &self,
         job_full_name: &str,
+        build_id: u64,
         build_status: u8,
-    ) -> Result<Option<u8>> {
+    ) -> Result<Option<PreviousBuild>> {
         let old = self
             .conn
             .get(job_full_name)
             .await?
             .and_then(|value| serde_json::from_value(value).ok());
 
-        self.conn.set(job_full_name, build_status).await?;
+        self.conn
+            .set(
+                job_full_name,
+                PreviousBuild {
+                    id: build_id,
+                    status: build_status,
+                },
+            )
+            .await?;
 
         Ok(old)
+    }
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct PreviousBuild {
+    pub id: u64,
+    pub status: u8,
+}
+
+impl PreviousBuild {
+    pub fn is_failing(&self) -> bool {
+        self.status != 0
     }
 }
