@@ -33,7 +33,12 @@ impl Mailer {
     }
 
     pub fn send_report(&self, entries: &[ReportEntry]) -> Result<()> {
-        if entries.is_empty() {
+        if entries.is_empty()
+            || entries
+                .iter()
+                .find(|entry| entry.outcome != BuildOutcome::StillFailingSameBuild)
+                .is_none()
+        {
             return Ok(());
         }
 
