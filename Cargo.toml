@@ -7,7 +7,7 @@ edition = "2024"
 anyhow = "1.0.100"
 brotli = "8.0.2"
 clap = { version = "4.5.53", features = ["derive", "env"] }
-itertools = "0.14.0"
+itertools = "0.15.0"
 keyv = { version = "0.3.0", features = ["postgres"] }
 lettre = "0.11.19"
 reqwest = { version = "0.13.0", features = ["blocking", "json"] }
