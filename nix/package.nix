@@ -1,5 +1,6 @@
 {
   lib,
+  aws-lc,
   openssl,
   pkg-config,
   rustPlatform,
@@ -26,6 +27,7 @@ rustPlatform.buildRustPackage (finalAttrs: {
   ];
 
   buildInputs = [
+    aws-lc
     openssl
   ];
 
